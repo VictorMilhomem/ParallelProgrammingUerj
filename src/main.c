@@ -1,34 +1,27 @@
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
 
-#define N 1000000000
+#define MATMUL_IMPLEMENTATION
+#include "matmul.h"
+
+int main(void) {
+ size_t N[] = {100, 500, 1000, 2000} ;
+ size_t runs = 3;
+ size_t results[4] = {0};
+
+	for (size_t i=0; i<runs;i++) {
+        size_t n = N[i];
+        init_matrix(n);
+		results[0] += run_sim(n);
+        results[1] += run_sim(n);
+		results[2] += run_sim(n);
+		results[3] += run_sim(n);
+	}
 
 
-int main(int argc, char **argv) {
-    int i;
-    double mypi, h, sum, x;
-
-    h = 1.0/(double) N;
-    sum = 0.0;
-
-    #pragma omp parallel private(x, i) shared(h) reduction(+:sum) 
-    {
-        int num_threads = omp_get_num_threads();
-        int id = omp_get_thread_num();
-        int start = id * (N/num_threads) + 1;
-        int end = (id == num_threads - 1) ? N : (id + 1) * (N/num_threads);
-
-        for (i = start; i <= end; i++) {
-            x = h * ((double) i - 0.5);
-            sum += 4.0 / (1.0 + x*x);
-        }
+    for (size_t i = 0; i < 4; i++) {
+        double mean = (double)results[i] / (double)runs;
+        printf("Matrix[%ld]: %f microseconds\n", N[i], mean);
     }
-    mypi = h * sum;
 
-    printf("PI: %.16f\n", mypi);
-    return 0;
+	return 0;
+
 }
