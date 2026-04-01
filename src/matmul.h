@@ -15,7 +15,7 @@ double c[MAX_MAT_SIZE][MAX_MAT_SIZE];
 
 size_t run_sim(size_t N);
 void init_matrix(size_t N);
-#endif MATMUL_H
+#endif // MATMUL_H
 
 #ifdef MATMUL_IMPLEMENTATION
 
