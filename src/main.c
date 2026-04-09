@@ -1,21 +1,22 @@
+#define SIM_IMPLEMENTATION
+#include "sim.h"
 
-#define MATMUL_IMPLEMENTATION
-#include "matmul.h"
 
-double mean(size_t total, size_t runs) {
-    return (double)total / (double)runs;
-}
+int main(int argc, char* argv[]) {
+    const uint64_t N[] = {100, 500, 1000, 2000, 4000} ;
+    size_t diff_sizes = sizeof(N) / sizeof(N[0]);
+    arena_t allocator = mk_arena_allocator(MB(600));
+    size_t runs;
+    if (argc <= 0) runs = 1;
 
-int main(void) {
-    const uint64_t N[] = {100, 500, 1000, 2000} ;
-    const size_t runs = 10;
-    arena_t allocator = mk_arena_allocator(MB(200));
+    runs = atoi(argv[1]);
+
     const size_t max_threads = 6;
 
     FILE* f = fopen("speedup.csv", "w");
     fprintf(f, "n_row,n_col,threads,average_time,speedup,total_runs\n");
 
-    for (size_t i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < diff_sizes; ++i) {
         uint64_t n = N[i];
 
         // baseline (1 thread)

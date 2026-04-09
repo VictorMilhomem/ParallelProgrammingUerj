@@ -1,5 +1,13 @@
-#ifndef MATMUL_H
-#define MATMUL_H
+#ifndef SIM_H
+#define SIM_H
+
+/*
+ * Use this file for the simulation exercise, after the
+ * simulation create a copy with the exercise name
+ * cp sim.h exercise_name.h
+ */
+
+
 
 #include <stdio.h>
 #include <sys/time.h>
@@ -22,9 +30,9 @@ matrix init_matrix(arena_t allocator[static 1], uint64_t n, double value);
 size_t measure(arena_t allocator[static 1], uint64_t n, size_t threads);
 double mean(size_t total, size_t runs);
 
-#endif // MATMUL_H
+#endif // SIM_H
 
-#ifdef MATMUL_IMPLEMENTATION
+#ifdef SIM_IMPLEMENTATION
 
 size_t run_sim_seq(arena_t allocator[static 1], uint64_t n) {
 	struct timeval  tstart, tend;
@@ -106,4 +114,4 @@ double mean(size_t total, size_t runs) {
     return (double)total / (double)runs;
 }
 
-#endif // MATMUL_IMPLEMENTATION
+#endif // SIM_IMPLEMENTATION
