@@ -3,7 +3,7 @@
 
 
 int main(int argc, char* argv[]) {
-    const uint64_t N[] = {100, 500, 1000, 2000, 4000} ;
+    const uint64_t N[] = {100, 500, 1000, 2000} ;
     size_t diff_sizes = sizeof(N) / sizeof(N[0]);
     arena_t allocator = mk_arena_allocator(MB(600));
     size_t runs;

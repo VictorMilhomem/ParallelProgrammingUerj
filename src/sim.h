@@ -26,7 +26,7 @@ typedef struct {
 size_t run_sim_seq(arena_t allocator[static 1], uint64_t n);
 size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads);
 // populates the matrix with the same value
-matrix init_matrix(arena_t allocator[static 1], uint64_t n, double value);
+matrix* init_matrix(arena_t allocator[static 1], uint64_t n, double value);
 size_t measure(arena_t allocator[static 1], uint64_t n, size_t threads);
 double mean(size_t total, size_t runs);
 
@@ -36,16 +36,16 @@ double mean(size_t total, size_t runs);
 
 size_t run_sim_seq(arena_t allocator[static 1], uint64_t n) {
 	struct timeval  tstart, tend;
-    matrix a = init_matrix(allocator, n, 1);
-    matrix b = init_matrix(allocator, n, 1);
-    matrix c = init_matrix(allocator, n, 0);
+    matrix* a = init_matrix(allocator, n, 1);
+    matrix* b = init_matrix(allocator, n, 1);
+    matrix* c = init_matrix(allocator, n, 0);
 
 	gettimeofday(&tstart, NULL);
 
 	for (uint64_t i = 0; i < n; ++i) {
 		for(uint64_t j = 0; j < n; ++j) {
 			for (uint64_t k = 0; k < n; ++k){
-                c.data[j + i * n] = c.data[j + i * n] + a.data[k + i * n] * b.data[j + k * n];
+                    c->data[j + i * n] = c->data[j + i * n] + a->data[k + i * n] * b->data[j + k * n];
 					// c[i][j] = c[i][j] + a[i][k] * b[k][j];
 			}
 		}
@@ -57,9 +57,9 @@ size_t run_sim_seq(arena_t allocator[static 1], uint64_t n) {
 
 size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads) {
 	struct timeval  tstart, tend;
-    matrix a = init_matrix(allocator, n, 1);
-    matrix b = init_matrix(allocator, n, 1);
-    matrix c = init_matrix(allocator, n, 0);
+    matrix* a = init_matrix(allocator, n, 1);
+    matrix* b = init_matrix(allocator, n, 1);
+    matrix* c = init_matrix(allocator, n, 0);
 
 	gettimeofday(&tstart, NULL);
 	#pragma omp parallel num_threads(threads)
@@ -68,7 +68,7 @@ size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads)
 		for (uint64_t i = 0; i < n; ++i) {
 			for(uint64_t j = 0; j < n; ++j) {
 				for (uint64_t k = 0; k < n; ++k){
-                    c.data[j + i * n] = c.data[j + i * n] + a.data[k + i * n] * b.data[j + k * n];
+                    c->data[j + i * n] = c->data[j + i * n] + a->data[k + i * n] * b->data[j + k * n];
 					// c[i][j] = c[i][j] + a[i][k] * b[k][j];
 				}
 
@@ -81,19 +81,20 @@ size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads)
 	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
 }
 
-matrix init_matrix(arena_t allocator[static 1], uint64_t n, double value) {
-    double* data = arena_alloc(allocator, double, n);
+matrix* init_matrix(arena_t allocator[static 1], uint64_t n, double value) {
+    matrix* m = arena_alloc(allocator, matrix, 1);
+    double* data = arena_alloc(allocator, double, n * n);
     assert(data);
 
-    matrix m = (matrix){
+    *m = (matrix){
         .rows = n,
         .cols = n,
         .data = data
     };
 
-    for (uint64_t i = 0; i < m.rows; ++i) {
-		for(uint64_t j = 0; j < m.cols; ++j) {
-            m.data[j + i * m.cols] = value;
+    for (uint64_t i = 0; i < m->rows; ++i) {
+		for(uint64_t j = 0; j < m->cols; ++j) {
+            m->data[j + i * m->cols] = value;
 		}
 	}
 
