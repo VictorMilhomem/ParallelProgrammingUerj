@@ -7,14 +7,11 @@
  * cp sim.h exercise_name.h
  */
 
-
-
 #include <stdio.h>
 #include <sys/time.h>
 #define RIO_STB_ALLOC_IMPLEMENTATION
 #include "rio_stb_alloc.h"
 
-#define MAX_MAT_SIZE 2500
 
 typedef struct {
     uint64_t rows;
@@ -22,9 +19,14 @@ typedef struct {
     double* data;
 } matrix;
 
+typedef struct {
+    double* data;
+    uint64_t n;
+} vector;
 
 size_t run_sim_seq(arena_t allocator[static 1], uint64_t n);
 size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads);
+vector* init_random_vector(arena_t allocator[static 1], uint64_t n);
 // populates the matrix with the same value
 matrix* init_matrix(arena_t allocator[static 1], uint64_t n, double value);
 size_t measure(arena_t allocator[static 1], uint64_t n, size_t threads);
@@ -36,49 +38,77 @@ double mean(size_t total, size_t runs);
 
 size_t run_sim_seq(arena_t allocator[static 1], uint64_t n) {
 	struct timeval  tstart, tend;
-    matrix* a = init_matrix(allocator, n, 1);
-    matrix* b = init_matrix(allocator, n, 1);
-    matrix* c = init_matrix(allocator, n, 0);
+    vector* x = init_random_vector(allocator, n);
 
 	gettimeofday(&tstart, NULL);
 
+    double max_local = 0.0;
+    uint64_t maxloc_local = 0;
 	for (uint64_t i = 0; i < n; ++i) {
-		for(uint64_t j = 0; j < n; ++j) {
-			for (uint64_t k = 0; k < n; ++k){
-                    c->data[j + i * n] = c->data[j + i * n] + a->data[k + i * n] * b->data[j + k * n];
-					// c[i][j] = c[i][j] + a[i][k] * b[k][j];
-			}
-		}
+        if(x->data[i] > max_local) {
+            max_local = x->data[i];
+            maxloc_local = i;
+        }
 	}
+
 	gettimeofday(&tend, NULL);
 	arena_reset_ptr(allocator);
 	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
 }
 
 size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads) {
-	struct timeval  tstart, tend;
-    matrix* a = init_matrix(allocator, n, 1);
-    matrix* b = init_matrix(allocator, n, 1);
-    matrix* c = init_matrix(allocator, n, 0);
+    struct timeval  tstart, tend;
+    vector* x = init_random_vector(allocator, n);
+    double maxval = 0.0;
+    uint64_t maxloc = 0;
+    uint64_t count = 0;
 
-	gettimeofday(&tstart, NULL);
-	#pragma omp parallel num_threads(threads)
-	{
-        #pragma omp for
-		for (uint64_t i = 0; i < n; ++i) {
-			for(uint64_t j = 0; j < n; ++j) {
-				for (uint64_t k = 0; k < n; ++k){
-                    c->data[j + i * n] = c->data[j + i * n] + a->data[k + i * n] * b->data[j + k * n];
-					// c[i][j] = c[i][j] + a[i][k] * b[k][j];
-				}
-
-			}
-		}
-		
+    gettimeofday(&tstart, NULL);
+#pragma omp parallel
+{
+    double max_local = 0.0;
+    uint64_t maxloc_local = 0;
+    #pragma omp for
+    for (uint64_t i = 0; i < n; ++i) {
+        if(x->data[i] > max_local) {
+            max_local = x->data[i];
+            maxloc_local = i;
+        }
 	}
-	gettimeofday(&tend, NULL);
+
+    #pragma omp critical
+    {
+        if(max_local > maxval) {
+            maxval = max_local;
+            maxloc = maxloc_local;
+        }
+    }
+
+    #pragma omp for reduction(+:count)
+    for (uint64_t i = 0; i < n; ++i)
+        if (x->data[i] == maxval) count++;
+}
+    gettimeofday(&tend, NULL);
 	arena_reset_ptr(allocator);
+    printf("\t Max count: %ld\n", count);
 	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
+}
+
+vector* init_random_vector(arena_t allocator[static 1], uint64_t n) {
+    vector* vec = arena_alloc(allocator, vector, 1);
+    double* data = arena_alloc(allocator, double, n);
+    assert(data);
+
+    *vec = (vector){
+        .data = data,
+        .n = n
+    };
+
+    for (uint64_t i = 0; i < vec->n; ++i) {
+		vec->data[i] = rand() % 999;
+	}
+
+    return vec;
 }
 
 matrix* init_matrix(arena_t allocator[static 1], uint64_t n, double value) {
