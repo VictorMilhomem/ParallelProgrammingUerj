@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/time.h>
 #include <math.h>
 #include <omp.h>
@@ -125,6 +126,9 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 
 	allocate_memory(k, n, &x, &mean, &sum, &cluster, &count);
 
+	double *local_sum = malloc(threads * k * DIM * sizeof(double));
+	int *local_count = malloc(threads * k * sizeof(int));
+	
 	read_input(k, n, mean, x, cluster);
 
     flips = n;
@@ -160,9 +164,8 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 	      	}
 		}
 
-
-		double *local_sum = calloc(threads * k * DIM, sizeof(double));
-		int *local_count = calloc(threads * k, sizeof(int));
+		memset(local_sum, 0, sizeof(double) * threads * k * DIM);
+		memset(local_count, 0, sizeof(int) * threads * k);
 
 		#pragma omp parallel 
 		{
@@ -189,10 +192,6 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 			}
 		}
 
-
-		free(local_sum);
-		free(local_count);
-
         #pragma omp parallel for
 		for (int i = 0; i < k; i++) {
 			for (int j = 0; j < DIM; j++) {
@@ -208,7 +207,9 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 		printf("\n");
 	}
 
-	free_memory(x, mean, sum, cluster, count);
+	free_memory(x, mean, sum, cluster, count);	
+	free(local_sum);
+	free(local_count);
 	
 	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
 }
