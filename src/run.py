@@ -10,19 +10,41 @@ from collections import defaultdict
 class Simulation:
     c_code: str
     runs: int
+    
+    def run(self, k: int, n: int, input_script: str = "geninput.py") -> None:
+        base_path = Path(__file__).parent.resolve()
 
-    def run(self) -> None:
-        filepath = os.path.join(Path(__file__).parent.resolve(), self.c_code)
-        output_exe = os.path.join(Path(__file__).parent.resolve(), self.c_code.split(".")[0])
+        c_filepath = base_path / self.c_code
+        output_exe = base_path / Path(self.c_code).stem
 
-        compile_cmd = ["gcc", "-o", output_exe, "-O3", filepath, "-fopenmp"]
-        subprocess.run(compile_cmd, check=True)
+        input_file = base_path / "input.txt"
+        output_file = base_path / "output.txt"
+        input_script_path = base_path / input_script
 
-        exec_cmd = [output_exe, f"{self.runs}"]
-        subprocess.run(args=exec_cmd)
+        # Gen input.txt -> kmeans specific
+        with open(input_file, "w") as f:
+            subprocess.run(
+                ["python3", str(input_script_path), str(k), str(n)],
+                stdout=f,
+                check=True
+            )
 
-        clean_cmd = ["rm", output_exe]
-        subprocess.run(args=clean_cmd)
+        subprocess.run(
+            ["gcc", "-o", str(output_exe), "-O3", str(c_filepath), "-lm", "-fopenmp"],
+            check=True
+        )
+
+        # Run the executable with input.txt and save output to output.txt
+        with open(input_file, "r") as fin, open(output_file, "w") as fout:
+            subprocess.run(
+                [str(output_exe), str(self.runs), str(n)],
+                stdin=fin,
+                stdout=fout,
+                check=True,
+                cwd=base_path 
+            )
+
+        os.remove(output_exe)
 
     def speedup(self, filepath: str) -> dict:
         data = defaultdict(list)
@@ -50,14 +72,17 @@ class Simulation:
         plt.ylabel("Speedup")
         plt.grid()
         plt.legend()
-        plt.show()
         plt.savefig(save_to)
+        plt.show()
+
 
 if __name__ == "__main__":
-    sim = Simulation(c_code="main.c", runs=10)
-    sim.run()
-    # running outside src
-    csv_path = os.path.join(Path(__file__).parent.parent.resolve(), "speedup.csv")
+    sim = Simulation(c_code="main.c", runs=3)
+
+    sim.run(k=50, n=100000)
+
+    base_path = Path(__file__).parent.resolve()
+    csv_path = base_path / "speedup.csv"
 
     data = sim.speedup(csv_path)
-    sim.plot(data, "matmul_speedup.png")
+    sim.plot(data, base_path / "kmeans_speedup.png")

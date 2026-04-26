@@ -8,141 +8,238 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
 #include <sys/time.h>
-#define RIO_STB_ALLOC_IMPLEMENTATION
-#include "rio_stb_alloc.h"
+#include <math.h>
+#include <omp.h>
 
+#define DIM 3
 
-typedef struct {
-    uint64_t rows;
-    uint64_t cols;
-    double* data;
-} matrix;
-
-typedef struct {
-    double* data;
-    uint64_t n;
-} vector;
-
-size_t run_sim_seq(arena_t allocator[static 1], uint64_t n);
-size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads);
-vector* init_random_vector(arena_t allocator[static 1], uint64_t n);
-// populates the matrix with the same value
-matrix* init_matrix(arena_t allocator[static 1], uint64_t n, double value);
-size_t measure(arena_t allocator[static 1], uint64_t n, size_t threads);
+size_t run_sim_seq(uint64_t n_unsed);
+size_t run_sim_parallel(uint64_t n_unsed, size_t threads);
+size_t measure(uint64_t n, size_t threads);
 double mean(size_t total, size_t runs);
+void read_input(int k, int n, double *mean, double *x, int *cluster);
+void allocate_memory(int k, int n, double **x, double **mean, double **sum, int **cluster, int **count);
+void free_memory(double *x, double *mean, double *sum, int *cluster, int *count);
 
 #endif // SIM_H
 
 #ifdef SIM_IMPLEMENTATION
 
-size_t run_sim_seq(arena_t allocator[static 1], uint64_t n) {
+size_t run_sim_seq(uint64_t n_unsed) {
 	struct timeval  tstart, tend;
-    vector* x = init_random_vector(allocator, n);
+
+    int k, n;
+	double dmin, dx;
+	double *x, *mean, *sum;
+	int *cluster, *count, color;
+	int flips;
+
+    freopen("input.txt", "r", stdin);
+	scanf("%d", &k);
+	scanf("%d", &n);
+
+	allocate_memory(k, n, &x, &mean, &sum, &cluster, &count);
+
+	read_input(k, n, mean, x, cluster);
+
+    flips = n;
 
 	gettimeofday(&tstart, NULL);
+	
+	while (flips>0) {
+		flips = 0;
 
-    double max_local = 0.0;
-    uint64_t maxloc_local = 0;
-	for (uint64_t i = 0; i < n; ++i) {
-        if(x->data[i] > max_local) {
-            max_local = x->data[i];
-            maxloc_local = i;
-        }
-	}
+		for (int j = 0; j < k; j++) {
+			count[j] = 0; 
+			for (int i = 0; i < DIM; i++) 
+				sum[j*DIM+i] = 0.0;
+		}
 
-	gettimeofday(&tend, NULL);
-	arena_reset_ptr(allocator);
-	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
-}
+		for (int i = 0; i < n; i++) {
+			dmin = -1; color = cluster[i];
+			for (int c = 0; c < k; c++) {
+				dx = 0.0;
+				for (int j = 0; j < DIM; j++) 
+					dx +=  (x[i*DIM+j] - mean[c*DIM+j])*(x[i*DIM+j] - mean[c*DIM+j]);
+				if (dx < dmin || dmin == -1) {
+					color = c;
+					dmin = dx;
+				}
+			}
+		
+            if (cluster[i] != color) {
+				flips++;
+				cluster[i] = color;
+	      	}
+		}
 
-size_t run_sim_parallel(arena_t allocator[static 1], uint64_t n, size_t threads) {
-    struct timeval  tstart, tend;
-    vector* x = init_random_vector(allocator, n);
-    double maxval = 0.0;
-    uint64_t maxloc = 0;
-    uint64_t count = 0;
-
-    gettimeofday(&tstart, NULL);
-#pragma omp parallel
-{
-    double max_local = 0.0;
-    uint64_t maxloc_local = 0;
-    #pragma omp for
-    for (uint64_t i = 0; i < n; ++i) {
-        if(x->data[i] > max_local) {
-            max_local = x->data[i];
-            maxloc_local = i;
-        }
-	}
-
-    #pragma omp critical
-    {
-        if(max_local > maxval) {
-            maxval = max_local;
-            maxloc = maxloc_local;
-        }
-    }
-
-    #pragma omp for reduction(+:count)
-    for (uint64_t i = 0; i < n; ++i)
-        if (x->data[i] == maxval) count++;
-}
-    gettimeofday(&tend, NULL);
-	arena_reset_ptr(allocator);
-    printf("\t Max count: %ld\n", count);
-	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
-}
-
-vector* init_random_vector(arena_t allocator[static 1], uint64_t n) {
-    vector* vec = arena_alloc(allocator, vector, 1);
-    double* data = arena_alloc(allocator, double, n);
-    assert(data);
-
-    *vec = (vector){
-        .data = data,
-        .n = n
-    };
-
-    for (uint64_t i = 0; i < vec->n; ++i) {
-		vec->data[i] = rand() % 999;
-	}
-
-    return vec;
-}
-
-matrix* init_matrix(arena_t allocator[static 1], uint64_t n, double value) {
-    matrix* m = arena_alloc(allocator, matrix, 1);
-    double* data = arena_alloc(allocator, double, n * n);
-    assert(data);
-
-    *m = (matrix){
-        .rows = n,
-        .cols = n,
-        .data = data
-    };
-
-    for (uint64_t i = 0; i < m->rows; ++i) {
-		for(uint64_t j = 0; j < m->cols; ++j) {
-            m->data[j + i * m->cols] = value;
+	    for (int i = 0; i < n; i++) {
+			count[cluster[i]]++;
+			for (int j = 0; j < DIM; j++) 
+				sum[cluster[i]*DIM+j] += x[i*DIM+j];
+		}
+		
+        for (int i = 0; i < k; i++) {
+			for (int j = 0; j < DIM; j++) {
+				mean[i*DIM+j] = sum[i*DIM+j]/count[i];
+  			}
 		}
 	}
+	gettimeofday(&tend, NULL);
 
-    return m;
+    for (int i = 0; i < k; i++) {
+		for (int j = 0; j < DIM; j++)
+			printf("%5.2f ", mean[i*DIM+j]);
+		printf("\n");
+	}
+	#ifdef DEBUG
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < DIM; j++)
+			printf("%5.2f ", x[i*DIM+j]);
+		printf("%d\n", cluster[i]);
+	}
+	#endif
+
+	free_memory(x, mean, sum, cluster, count);
+
+	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
 }
 
-size_t measure(arena_t allocator[static 1], uint64_t n, size_t threads) {
+size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
+	struct timeval  tstart, tend;
+
+
+    int k, n;
+	double dmin, dx;
+	double *x, *mean, *sum;
+	int *cluster, *count, color;
+	int flips;
+	
+    freopen("input.txt", "r", stdin);
+
+    scanf("%d", &k);
+	scanf("%d", &n);
+
+	allocate_memory(k, n, &x, &mean, &sum, &cluster, &count);
+
+	read_input(k, n, mean, x, cluster);
+
+    flips = n;
+    omp_set_num_threads(threads);
+
+	gettimeofday(&tstart, NULL);
+	
+	while (flips>0) {
+		flips = 0;
+		#pragma omp parallel for
+        for (int j = 0; j < k; j++) {
+			count[j] = 0; 
+			for (int i = 0; i < DIM; i++) 
+				sum[j*DIM+i] = 0.0;
+		}
+
+        #pragma omp parallel for private( dx, dmin, color) reduction(+:flips)
+        for (int i = 0; i < n; i++) {
+			dmin = -1; color = cluster[i];
+			for (int c = 0; c < k; c++) {
+				dx = 0.0;
+				for (int j = 0; j < DIM; j++) 
+					dx +=  (x[i*DIM+j] - mean[c*DIM+j])*(x[i*DIM+j] - mean[c*DIM+j]);
+				if (dx < dmin || dmin == -1) {
+					color = c;
+					dmin = dx;
+				}
+			}
+			if (cluster[i] != color) {
+				flips++;
+				cluster[i] = color;
+	      	}
+		}
+
+	    for (int i = 0; i < n; i++) {
+			count[cluster[i]]++;
+			for (int j = 0; j < DIM; j++) 
+				sum[cluster[i]*DIM+j] += x[i*DIM+j];
+		}
+
+         #pragma omp parallel for
+		for (int i = 0; i < k; i++) {
+			for (int j = 0; j < DIM; j++) {
+				mean[i*DIM+j] = sum[i*DIM+j]/count[i];
+  			}
+		}
+	}
+	gettimeofday(&tend, NULL);
+
+    for (int i = 0; i < k; i++) {
+		for (int j = 0; j < DIM; j++)
+			printf("%5.2f ", mean[i*DIM+j]);
+		printf("\n");
+	}
+	#ifdef DEBUG
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < DIM; j++)
+			printf("%5.2f ", x[i*DIM+j]);
+		printf("%d\n", cluster[i]);
+	}
+	#endif
+
+	free_memory(x, mean, sum, cluster, count);
+	
+	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
+}
+
+
+size_t measure(uint64_t n, size_t threads) {
     if (threads == 1) {
-        printf("Matrix[%ld] Sequential Execution (Threads: %d)\n", n, 1);
-        return run_sim_seq(allocator, n);
+        return run_sim_seq(n);
     }
 
-    printf("Matrix[%ld] Parallel Execution (Threads: %ld)\n", n, threads);
-    return run_sim_parallel(allocator, n, threads);
+    return run_sim_parallel(n, threads);
 }
 
 double mean(size_t total, size_t runs) {
     return (double)total / (double)runs;
+}
+
+
+void read_input(int k, int n, double *mean, double *x, int *cluster) {
+    for (int i = 0; i < n; i++) 
+        cluster[i] = 0;
+
+    for (int i = 0; i < k; i++)
+        scanf("%lf %lf %lf",
+              mean + i*DIM,
+              mean + i*DIM + 1,
+              mean + i*DIM + 2);
+
+    for (int i = 0; i < n; i++)
+        scanf("%lf %lf %lf",
+              x + i*DIM,
+              x + i*DIM + 1,
+              x + i*DIM + 2);
+}
+
+void allocate_memory(int k, int n,
+                     double **x, double **mean, double **sum,
+                     int **cluster, int **count) {
+    
+    *x = (double *)malloc(sizeof(double) * DIM * n);
+    *mean = (double *)malloc(sizeof(double) * DIM * k);
+    *sum = (double *)malloc(sizeof(double) * DIM * k);
+    *cluster = (int *)malloc(sizeof(int) * n);
+    *count = (int *)malloc(sizeof(int) * k);
+}
+
+void free_memory(double *x, double *mean, double *sum, int *cluster, int *count) {
+	free(x);
+	free(mean);
+	free(sum);
+	free(cluster);
+	free(count);
 }
 
 #endif // SIM_IMPLEMENTATION
