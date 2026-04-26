@@ -134,6 +134,7 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 	
 	while (flips>0) {
 		flips = 0;
+		// init centroids
 		#pragma omp parallel for
         for (int j = 0; j < k; j++) {
 			count[j] = 0; 
@@ -141,7 +142,7 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 				sum[j*DIM+i] = 0.0;
 		}
 
-        #pragma omp parallel for private( dx, dmin, color) reduction(+:flips)
+        #pragma omp parallel for private( dx, dmin, color) schedule(dynamic, 1000) reduction(+:flips)
         for (int i = 0; i < n; i++) {
 			dmin = -1; color = cluster[i];
 			for (int c = 0; c < k; c++) {
@@ -159,13 +160,40 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 	      	}
 		}
 
-	    for (int i = 0; i < n; i++) {
-			count[cluster[i]]++;
-			for (int j = 0; j < DIM; j++) 
-				sum[cluster[i]*DIM+j] += x[i*DIM+j];
+
+		double *local_sum = calloc(threads * k * DIM, sizeof(double));
+		int *local_count = calloc(threads * k, sizeof(int));
+
+		#pragma omp parallel 
+		{
+			int tid = omp_get_thread_num();
+
+			#pragma omp for schedule(dynamic, 1000)
+			for (int i = 0; i < n; i++) {
+				int c = cluster[i];
+				local_count[tid*k+c]++;
+
+				for (int j = 0; j < DIM; j++) 
+					local_sum[tid*k*DIM + c*DIM + j] += x[i*DIM + j];
+			}
 		}
 
-         #pragma omp parallel for
+
+		for (int t = 0; t < threads; t++) {
+			for (int c = 0; c < k; c++) {
+				count[c] += local_count[t*k + c];
+
+				for (int j = 0; j < DIM; j++) {
+					sum[c*DIM + j] += local_sum[t*k*DIM + c*DIM + j];
+				}
+			}
+		}
+
+
+		free(local_sum);
+		free(local_count);
+
+        #pragma omp parallel for
 		for (int i = 0; i < k; i++) {
 			for (int j = 0; j < DIM; j++) {
 				mean[i*DIM+j] = sum[i*DIM+j]/count[i];
@@ -179,13 +207,6 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 			printf("%5.2f ", mean[i*DIM+j]);
 		printf("\n");
 	}
-	#ifdef DEBUG
-	for (int i = 0; i < n; i++) {
-		for (int j = 0; j < DIM; j++)
-			printf("%5.2f ", x[i*DIM+j]);
-		printf("%d\n", cluster[i]);
-	}
-	#endif
 
 	free_memory(x, mean, sum, cluster, count);
 	

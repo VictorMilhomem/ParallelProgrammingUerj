@@ -30,7 +30,7 @@ class Simulation:
             )
 
         subprocess.run(
-            ["gcc", "-o", str(output_exe), "-O3", str(c_filepath), "-lm", "-fopenmp"],
+            ["clang", "-o", str(output_exe), "-O3", str(c_filepath), "-lm", "-fopenmp"],
             check=True
         )
 
@@ -77,9 +77,9 @@ class Simulation:
 
 
 if __name__ == "__main__":
-    sim = Simulation(c_code="main.c", runs=3)
+    sim = Simulation(c_code="main.c", runs=10)
 
-    sim.run(k=50, n=100000)
+    sim.run(k=50, n=1000000)
 
     base_path = Path(__file__).parent.resolve()
     csv_path = base_path / "speedup.csv"
