@@ -30,7 +30,7 @@ class Simulation:
             )
 
         subprocess.run(
-            ["clang", "-o", str(output_exe), "-O3", str(c_filepath), "-lm", "-fopenmp"],
+            ["gcc", "-o", str(output_exe), "-O3", str(c_filepath), "-lm", "-fopenmp"],
             check=True
         )
 

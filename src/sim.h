@@ -96,13 +96,6 @@ size_t run_sim_seq(uint64_t n_unsed) {
 			printf("%5.2f ", mean[i*DIM+j]);
 		printf("\n");
 	}
-	#ifdef DEBUG
-	for (int i = 0; i < n; i++) {
-		for (int j = 0; j < DIM; j++)
-			printf("%5.2f ", x[i*DIM+j]);
-		printf("%d\n", cluster[i]);
-	}
-	#endif
 
 	free_memory(x, mean, sum, cluster, count);
 
@@ -126,9 +119,7 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 
 	allocate_memory(k, n, &x, &mean, &sum, &cluster, &count);
 
-	double *local_sum = malloc(threads * k * DIM * sizeof(double));
-	int *local_count = malloc(threads * k * sizeof(int));
-	
+
 	read_input(k, n, mean, x, cluster);
 
     flips = n;
@@ -138,7 +129,7 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 	
 	while (flips>0) {
 		flips = 0;
-		// init centroids
+
 		#pragma omp parallel for
         for (int j = 0; j < k; j++) {
 			count[j] = 0; 
@@ -164,33 +155,12 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 	      	}
 		}
 
-		memset(local_sum, 0, sizeof(double) * threads * k * DIM);
-		memset(local_count, 0, sizeof(int) * threads * k);
-
-		#pragma omp parallel 
-		{
-			int tid = omp_get_thread_num();
-
-			#pragma omp for schedule(dynamic, 1000)
-			for (int i = 0; i < n; i++) {
-				int c = cluster[i];
-				local_count[tid*k+c]++;
-
-				for (int j = 0; j < DIM; j++) 
-					local_sum[tid*k*DIM + c*DIM + j] += x[i*DIM + j];
-			}
+		for (int i = 0; i < n; i++) {
+			count[cluster[i]]++;
+			for (int j = 0; j < DIM; j++) 
+				sum[cluster[i]*DIM+j] += x[i*DIM+j];
 		}
-
-
-		for (int t = 0; t < threads; t++) {
-			for (int c = 0; c < k; c++) {
-				count[c] += local_count[t*k + c];
-
-				for (int j = 0; j < DIM; j++) {
-					sum[c*DIM + j] += local_sum[t*k*DIM + c*DIM + j];
-				}
-			}
-		}
+		
 
         #pragma omp parallel for
 		for (int i = 0; i < k; i++) {
@@ -208,8 +178,7 @@ size_t run_sim_parallel(uint64_t n_unsed, size_t threads) {
 	}
 
 	free_memory(x, mean, sum, cluster, count);	
-	free(local_sum);
-	free(local_count);
+
 	
 	return ((tend.tv_sec*1000000 + tend.tv_usec) - (tstart.tv_sec * 1000000 + tstart.tv_usec));
 }
